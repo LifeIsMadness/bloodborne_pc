@@ -4492,7 +4492,7 @@ class Launcher(bbport_setup.SetupMixin, bbport_help.HelpMixin, bbport_search.Sea
             self.root.after_idle(lambda: self.root.bind_all('<ButtonPress>', on_click))
             # While waiting, the wheel binds instead of scrolling the page.
             self.root.bind_all('<MouseWheel>', on_wheel)
-            self.root.bind_all('<Shift-MouseWheel>', lambda e: on_wheel(e, True))
+            self.root.bind_all('<Shift-MouseWheel>', lambda e: on_wheel(e, False))
             if poller is not None:
                 state['poll_job'] = self.root.after(10, poll_mouse)
 
