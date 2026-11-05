@@ -45,6 +45,25 @@ jobs:
       - name: Build project
         run: bash build.sh
 
+      - name: Checkout NVIDIA DLSS SDK
+        uses: actions/checkout@v4
+        with:
+          repository: NVIDIA/DLSS
+          path: NVIDIA-DLSS
+          persist-credentials: false
+
+      - name: Build DLSS bridge
+        env:
+          DLSS_SDK_ROOT: ${{ github.workspace }}/NVIDIA-DLSS
+        run: |
+          # MSYS2 CMake cannot generate Visual Studio projects; use runner's Windows CMake.
+          export CMAKE_EXE="$(cygpath -u 'C:/Program Files/CMake/bin/cmake.exe')"
+          export DLSS_SDK_ROOT="$(cygpath -u "$DLSS_SDK_ROOT")"
+          bash packaging/windows/build_dlss.sh
+          test -s out/bbport_dlss.dll
+          test -s out/nvngx_dlss.dll
+          test -s out/nvngx_dlssg.dll
+
       - name: Package Windows release
         run: bash packaging/windows/package.sh --zip-only
 
