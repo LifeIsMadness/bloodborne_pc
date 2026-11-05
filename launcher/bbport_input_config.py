@@ -328,6 +328,79 @@ def wheel_to_name(delta, horizontal=False):
     return 'mousewheelup' if delta > 0 else 'mousewheeldown'
 
 
+
+
+class WindowsWheelCapture:
+    """Observe wheel messages removed by this Tk GUI thread during remapping.
+
+    Tk maps WM_MOUSEHWHEEL to Shift-MouseWheel and reverses its delta. Save the
+    native axis/delta *before* Tk translates it; never call Tk from the hook.
+    """
+
+    def __init__(self):
+        self.events = None
+        self.handle = None
+        self.callback = None
+        self.user32 = None
+
+    def start(self):
+        if sys.platform != 'win32':
+            return False
+        import ctypes
+        from ctypes import wintypes
+        from collections import deque
+
+        class MSG(ctypes.Structure):
+            _fields_ = [('hwnd', wintypes.HWND), ('message', wintypes.UINT),
+                        ('wParam', ctypes.c_size_t), ('lParam', ctypes.c_ssize_t),
+                        ('time', wintypes.DWORD), ('pt', wintypes.POINT),
+                        ('lPrivate', wintypes.DWORD)]
+
+        HOOKPROC = ctypes.WINFUNCTYPE(ctypes.c_ssize_t, ctypes.c_int,
+                                     ctypes.c_size_t, ctypes.c_ssize_t)
+        u = ctypes.WinDLL('user32', use_last_error=True)
+        k = ctypes.WinDLL('kernel32', use_last_error=True)
+        u.SetWindowsHookExW.argtypes = (ctypes.c_int, HOOKPROC, ctypes.c_void_p, wintypes.DWORD)
+        u.SetWindowsHookExW.restype = ctypes.c_void_p
+        u.CallNextHookEx.argtypes = (ctypes.c_void_p, ctypes.c_int, ctypes.c_size_t, ctypes.c_ssize_t)
+        u.CallNextHookEx.restype = ctypes.c_ssize_t
+        u.UnhookWindowsHookEx.argtypes = (ctypes.c_void_p,)
+        u.UnhookWindowsHookEx.restype = wintypes.BOOL
+        k.GetCurrentThreadId.restype = wintypes.DWORD
+        self.events = deque(maxlen=16)
+
+        def observe(code, wparam, lparam):
+            # PM_REMOVE=1: do not record the repeated PM_NOREMOVE peeks.
+            if code >= 0 and wparam == 1 and lparam:
+                try:
+                    msg = ctypes.cast(lparam, ctypes.POINTER(MSG)).contents
+                    if msg.message in (0x020A, 0x020E):
+                        delta = ctypes.c_short((msg.wParam >> 16) & 0xffff).value
+                        self.events.append((delta, msg.message == 0x020E))
+                except Exception:
+                    pass
+            return u.CallNextHookEx(None, code, wparam, lparam)
+
+        callback = HOOKPROC(observe)
+        handle = u.SetWindowsHookExW(3, callback, None, k.GetCurrentThreadId())
+        if not handle:
+            self.events = None
+            return False
+        self.user32, self.callback, self.handle = u, callback, handle
+        return True
+
+    def take(self):
+        """Return (native delta, is_horizontal), or None if not available."""
+        return self.events.popleft() if self.events else None
+
+    def stop(self):
+        if self.handle:
+            self.user32.UnhookWindowsHookEx(self.handle)
+            self.handle = None
+            self.callback = None
+        self.events = None
+        self.user32 = None
+
 def input_ini_path(bbport_ini_path):
     """Mirrors src/runtime_input_config.c's input_config_path(): BB_INPUT_CONFIG if set and
     non-empty, else input.ini next to bbport_ini_path (itself BB_CONFIG-derived)."""

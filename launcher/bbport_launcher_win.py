@@ -279,7 +279,7 @@ import bbport_update as updater  # noqa: E402 (the launcher's own update: checke
 from bbport_trophy_icons import TrophyIcons  # noqa: E402
 from bbport_input_config import (STICK_OUTPUTS, OUTPUT_LABELS, ACTION_GROUPS, SLOTS, keysym_to_name,
                                   button_num_to_name, input_ini_path, load_input_ini, reserved_keys,
-                                  save_input_ini, save_mouse_settings, wheel_to_name, MAX_COMBO,
+                                  save_input_ini, save_mouse_settings, wheel_to_name, WindowsWheelCapture, MAX_COMBO,
                                   MODIFIER_NAMES, apply_layout, slot_conflicts, binding_parts,
                                   display_name, CONTROLLER_OUTPUTS, DEFAULT_CONTROLLER,
                                   controller_conflicts, controller_display_name,
@@ -4384,6 +4384,9 @@ class Launcher(bbport_setup.SetupMixin, bbport_help.HelpMixin, bbport_search.Sea
         # first of the two paths to see a press the only one that binds it.
         poller = None if is_stick else windows_mouse_poller()
         state = {'done': False, 'poll_job': None}
+        wheel_capture = WindowsWheelCapture() if not is_stick else None
+        if wheel_capture is not None:
+            wheel_capture.start()  # Falls back to Tk if hook installation fails.
 
         # Tk on Windows sends Alt, Alt + key and F10 to the menu bar (tk::WinMenuKey, which
         # waits in the system menu's loop), not to <KeyPress>: they are taken over meanwhile.
@@ -4393,6 +4396,8 @@ class Launcher(bbport_setup.SetupMixin, bbport_help.HelpMixin, bbport_search.Sea
 
         def finish():
             state['done'] = True
+            if wheel_capture is not None:
+                wheel_capture.stop()
             if state['poll_job'] is not None:
                 self.root.after_cancel(state['poll_job'])
                 state['poll_job'] = None
@@ -4460,7 +4465,9 @@ class Launcher(bbport_setup.SetupMixin, bbport_help.HelpMixin, bbport_search.Sea
             apply(name)
 
         def on_wheel(event, horizontal=False):
-            name = wheel_to_name(event.delta, horizontal)
+            native = wheel_capture.take() if wheel_capture is not None else None
+            delta, horizontal = native if native is not None else (event.delta, horizontal)
+            name = wheel_to_name(delta, horizontal)
             if name:
                 apply(name)
             return 'break'
