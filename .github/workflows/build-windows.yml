@@ -52,6 +52,15 @@ jobs:
           path: NVIDIA-DLSS
           persist-credentials: false
 
+      - name: Prepare Vulkan headers for DLSS
+        run: |
+          mkdir -p /c/msys64/clang64/include
+      
+          cp -r \
+            "$MINGW_PREFIX/include/vulkan" \
+            "$MINGW_PREFIX/include/vk_video" \
+            /c/msys64/clang64/include/
+
       - name: Build DLSS bridge
         env:
           DLSS_SDK_ROOT: ${{ github.workspace }}/NVIDIA-DLSS
